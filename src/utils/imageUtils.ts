@@ -142,7 +142,8 @@ export const compressImage = (
   image: HTMLImageElement,
   quality: number,
   maxWidth?: number,
-  maxHeight?: number
+  maxHeight?: number,
+  algorithm: 'standard' | 'smart' | 'aggressive' = 'smart'
 ): HTMLCanvasElement => {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d')!;
@@ -162,8 +163,69 @@ export const compressImage = (
   canvas.width = width;
   canvas.height = height;
   
+  // Apply compression algorithm settings
+  switch (algorithm) {
+    case 'smart':
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      break;
+    case 'aggressive':
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'low';
+      break;
+    case 'standard':
+    default:
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'medium';
+      break;
+  }
+  
   ctx.drawImage(image, 0, 0, width, height);
   return canvas;
+};
+
+export const optimizeForWeb = async (
+  image: HTMLImageElement,
+  targetSize: number, // in KB
+  quality: number,
+  format: 'jpeg' | 'webp' | 'auto' = 'auto'
+): Promise<Blob> => {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d')!;
+  
+  canvas.width = image.width;
+  canvas.height = image.height;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(image, 0, 0);
+
+  const targetBytes = targetSize * 1024;
+  let currentQuality = quality;
+  let bestBlob: Blob | null = null;
+  let bestFormat = format;
+
+  // Auto-select best format
+  if (format === 'auto') {
+    const jpegBlob = await canvasToBlob(canvas, 'image/jpeg', quality);
+    const webpBlob = await canvasToBlob(canvas, 'image/webp', quality);
+    
+    bestFormat = webpBlob.size < jpegBlob.size ? 'webp' : 'jpeg';
+    bestBlob = webpBlob.size < jpegBlob.size ? webpBlob : jpegBlob;
+  } else {
+    const mimeType = format === 'webp' ? 'image/webp' : 'image/jpeg';
+    bestBlob = await canvasToBlob(canvas, mimeType, quality);
+  }
+
+  // If still too large, reduce quality iteratively
+  if (bestBlob.size > targetBytes && currentQuality > 0.1) {
+    const reductionFactor = Math.sqrt(targetBytes / bestBlob.size);
+    currentQuality = Math.max(0.1, currentQuality * reductionFactor);
+    
+    const mimeType = bestFormat === 'webp' ? 'image/webp' : 'image/jpeg';
+    bestBlob = await canvasToBlob(canvas, mimeType, currentQuality);
+  }
+
+  return bestBlob;
 };
 
 export const cropImage = (
