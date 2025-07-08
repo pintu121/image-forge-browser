@@ -228,6 +228,79 @@ export const optimizeForWeb = async (
   return bestBlob;
 };
 
+export const smartCompress = async (
+  image: HTMLImageElement,
+  targetSizeKB: number,
+  maxAttempts: number = 8
+): Promise<{ blob: Blob; actualSizeKB: number; attempts: number }> => {
+  const targetBytes = targetSizeKB * 1024;
+  let bestBlob: Blob | null = null;
+  let bestFormat: 'jpeg' | 'webp' = 'jpeg';
+  let attempts = 0;
+
+  // Try different formats to find the most efficient one
+  const formats: ('jpeg' | 'webp')[] = ['webp', 'jpeg'];
+  const qualities = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2];
+
+  for (const format of formats) {
+    for (let i = 0; i < qualities.length && attempts < maxAttempts; i++) {
+      attempts++;
+      
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+      
+      // Calculate optimal dimensions to reach target size
+      const aspectRatio = image.width / image.height;
+      let width = image.width;
+      let height = image.height;
+      
+      // Estimate size reduction needed based on target
+      const estimatedCompressionRatio = targetBytes / (image.width * image.height * 3); // rough estimation
+      if (estimatedCompressionRatio < 0.1) {
+        const scaleFactor = Math.sqrt(estimatedCompressionRatio * 10);
+        width = Math.round(image.width * scaleFactor);
+        height = Math.round(image.height * scaleFactor);
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(image, 0, 0, width, height);
+
+      const mimeType = format === 'webp' ? 'image/webp' : 'image/jpeg';
+      const blob = await canvasToBlob(canvas, mimeType, qualities[i]);
+      
+      if (!bestBlob || Math.abs(blob.size - targetBytes) < Math.abs(bestBlob.size - targetBytes)) {
+        bestBlob = blob;
+        bestFormat = format;
+      }
+      
+      // If we're close enough to target, stop
+      if (blob.size <= targetBytes && blob.size >= targetBytes * 0.8) {
+        bestBlob = blob;
+        break;
+      }
+      
+      // If we're under target and this is our best attempt, stop
+      if (blob.size <= targetBytes) {
+        break;
+      }
+    }
+    
+    // If we found a good result, no need to try other formats
+    if (bestBlob && bestBlob.size <= targetBytes) {
+      break;
+    }
+  }
+
+  return {
+    blob: bestBlob!,
+    actualSizeKB: Math.round(bestBlob!.size / 1024),
+    attempts
+  };
+};
+
 export const cropImage = (
   image: HTMLImageElement,
   x: number,

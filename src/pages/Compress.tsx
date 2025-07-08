@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { loadImageFromFile, canvasToBlob, downloadBlob, compressImage, optimizeForWeb, sharpenImage } from "@/utils/imageUtils";
+import { loadImageFromFile, canvasToBlob, downloadBlob, compressImage, smartCompress, sharpenImage } from "@/utils/imageUtils";
 import { Zap, Settings2, Target, Sparkles, FileDown, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 
@@ -29,6 +29,13 @@ const Compress = () => {
   const [quality, setQuality] = useState([80]);
   const [targetSize, setTargetSize] = useState<string>("500");
   const [customTargetSize, setCustomTargetSize] = useState<string>("");
+  const [targetUnit, setTargetUnit] = useState<'KB' | 'MB'>('KB');
+  const [compressionResult, setCompressionResult] = useState<{
+    actualSize: number;
+    targetSize: number;
+    attempts: number;
+    achieved: boolean;
+  } | null>(null);
   
   // Advanced settings
   const [algorithm, setAlgorithm] = useState<'standard' | 'smart' | 'aggressive'>('smart');
@@ -51,11 +58,14 @@ const Compress = () => {
     if (!originalFile) return;
 
     setLoading(true);
+    setCompressionResult(null);
+    
     try {
       const img = await loadImageFromFile(originalFile);
       
       let canvas: HTMLCanvasElement;
       let blob: Blob;
+      let result: { blob: Blob; actualSizeKB: number; attempts: number } | null = null;
 
       if (compressionMode === "quality") {
         // Quality-based compression
@@ -83,20 +93,58 @@ const Compress = () => {
         }
 
         // Convert to blob with selected format
-        if (outputFormat === 'auto') {
-          blob = await optimizeForWeb(img, 1000, targetQuality, 'auto');
-        } else {
-          const mimeType = outputFormat === 'webp' ? 'image/webp' : 'image/jpeg';
-          blob = await canvasToBlob(canvas, mimeType, targetQuality);
-        }
+        const mimeType = outputFormat === 'auto' ? 'image/jpeg' : 
+                         outputFormat === 'webp' ? 'image/webp' : 'image/jpeg';
+        blob = await canvasToBlob(canvas, mimeType, targetQuality);
       } else {
-        // Size-based compression
-        const targetSizeKB = customTargetSize ? 
-          parseInt(customTargetSize) : 
-          parseInt(targetSize);
+        // Size-based compression with smart algorithm
+        const targetSizeValue = customTargetSize ? 
+          parseFloat(customTargetSize) : 
+          parseFloat(targetSize);
         
-        const targetQuality = quality[0] / 100;
-        blob = await optimizeForWeb(img, targetSizeKB, targetQuality, outputFormat);
+        if (isNaN(targetSizeValue) || targetSizeValue <= 0) {
+          toast.error("Please enter a valid target size");
+          return;
+        }
+        
+        // Convert to KB if needed
+        const targetSizeKB = targetUnit === 'MB' ? targetSizeValue * 1024 : targetSizeValue;
+        
+        result = await smartCompress(img, targetSizeKB);
+        blob = result.blob;
+        
+        // Apply sharpening for clarity if enabled and if result is not too small
+        if (preserveClarity && sharpenStrength[0] > 0 && result.actualSizeKB > targetSizeKB * 0.5) {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d')!;
+          const tempImg = new Image();
+          tempImg.src = URL.createObjectURL(blob);
+          
+          await new Promise((resolve) => {
+            tempImg.onload = () => {
+              canvas.width = tempImg.width;
+              canvas.height = tempImg.height;
+              ctx.drawImage(tempImg, 0, 0);
+              const sharpenedCanvas = sharpenImage(canvas, sharpenStrength[0] * 0.5); // Reduced strength for compressed images
+              
+              canvasToBlob(sharpenedCanvas, blob.type, 0.95).then(sharpenedBlob => {
+                if (sharpenedBlob.size <= targetSizeKB * 1024 * 1.1) { // Allow 10% tolerance
+                  blob = sharpenedBlob;
+                  result!.actualSizeKB = Math.round(blob.size / 1024);
+                }
+                resolve(null);
+              });
+            };
+          });
+        }
+        
+        // Set compression result for feedback
+        setCompressionResult({
+          actualSize: result.actualSizeKB,
+          targetSize: targetSizeKB,
+          attempts: result.attempts,
+          achieved: result.actualSizeKB <= targetSizeKB * 1.05 // 5% tolerance
+        });
       }
 
       setProcessedBlob(blob);
@@ -105,14 +153,30 @@ const Compress = () => {
       
       const savings = ((originalSize - blob.size) / originalSize) * 100;
       const format = blob.type.split('/')[1].toUpperCase();
-      toast.success(`Image compressed to ${format}! ${savings.toFixed(1)}% size reduction`);
+      
+      if (compressionMode === "size" && result) {
+        const targetDisplay = targetUnit === 'MB' ? 
+          `${(result.actualSizeKB / 1024).toFixed(2)} MB` : 
+          `${result.actualSizeKB} KB`;
+        const targetGoal = targetUnit === 'MB' ? 
+          `${(customTargetSize ? parseFloat(customTargetSize) : parseFloat(targetSize))} MB` : 
+          `${(customTargetSize ? parseFloat(customTargetSize) : parseFloat(targetSize))} KB`;
+        
+        if (result.actualSizeKB <= parseFloat(targetSize) * (targetUnit === 'MB' ? 1024 : 1) * 1.05) {
+          toast.success(`🎯 Target achieved! Compressed to ${targetDisplay} (goal: ${targetGoal}) in ${result.attempts} attempts`);
+        } else {
+          toast.success(`Compressed to ${targetDisplay} (${savings.toFixed(1)}% smaller) - closest possible to ${targetGoal}`);
+        }
+      } else {
+        toast.success(`Image compressed to ${format}! ${savings.toFixed(1)}% size reduction`);
+      }
     } catch (error) {
       console.error('Compression error:', error);
       toast.error("Failed to compress image");
     } finally {
       setLoading(false);
     }
-  }, [originalFile, compressionMode, quality, targetSize, customTargetSize, algorithm, outputFormat, preserveClarity, sharpenStrength, maxDimensions, originalSize]);
+  }, [originalFile, compressionMode, quality, targetSize, customTargetSize, targetUnit, algorithm, outputFormat, preserveClarity, sharpenStrength, maxDimensions, originalSize]);
 
   const handleDownload = useCallback(() => {
     if (!processedBlob || !originalFile) return;
@@ -254,9 +318,10 @@ const Compress = () => {
                       <TabsContent value="size" className="space-y-4 mt-6">
                         <div className="space-y-3">
                           <Label className="text-sm font-medium">Target File Size</Label>
-                          <div className="flex gap-2">
+                          <div className="space-y-3">
+                            {/* Preset sizes */}
                             <Select value={targetSize} onValueChange={setTargetSize}>
-                              <SelectTrigger className="flex-1">
+                              <SelectTrigger>
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -265,19 +330,52 @@ const Compress = () => {
                                 <SelectItem value="200">200 KB</SelectItem>
                                 <SelectItem value="500">500 KB</SelectItem>
                                 <SelectItem value="1000">1 MB</SelectItem>
-                                <SelectItem value="custom">Custom</SelectItem>
+                                <SelectItem value="2000">2 MB</SelectItem>
+                                <SelectItem value="custom">Custom Size</SelectItem>
                               </SelectContent>
                             </Select>
+                            
+                            {/* Custom input */}
                             {targetSize === "custom" && (
-                              <Input
-                                type="number"
-                                placeholder="KB"
-                                value={customTargetSize}
-                                onChange={(e) => setCustomTargetSize(e.target.value)}
-                                className="w-20"
-                              />
+                              <div className="flex gap-2">
+                                <Input
+                                  type="number"
+                                  placeholder="Enter size"
+                                  value={customTargetSize}
+                                  onChange={(e) => setCustomTargetSize(e.target.value)}
+                                  className="flex-1"
+                                  min="1"
+                                  step="0.1"
+                                />
+                                <Select value={targetUnit} onValueChange={(value) => setTargetUnit(value as 'KB' | 'MB')}>
+                                  <SelectTrigger className="w-20">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="KB">KB</SelectItem>
+                                    <SelectItem value="MB">MB</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
                             )}
                           </div>
+                          
+                          {/* Target size preview */}
+                          {targetSize === "custom" && customTargetSize && (
+                            <div className="p-3 bg-accent/10 rounded-lg border border-accent/20">
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm text-muted-foreground">Target Size:</span>
+                                <Badge variant="secondary" className="text-xs font-mono">
+                                  {parseFloat(customTargetSize)} {targetUnit}
+                                  {targetUnit === 'MB' && ` (${(parseFloat(customTargetSize) * 1024).toFixed(0)} KB)`}
+                                </Badge>
+                              </div>
+                            </div>
+                          )}
+                          
+                          <p className="text-xs text-muted-foreground">
+                            Smart algorithm will optimize to reach your target size as closely as possible
+                          </p>
                         </div>
 
                         <div className="space-y-3">
@@ -295,6 +393,9 @@ const Compress = () => {
                             step={5}
                             className="w-full"
                           />
+                          <p className="text-xs text-muted-foreground">
+                            Starting quality for size-based compression
+                          </p>
                         </div>
                       </TabsContent>
                     </Tabs>
@@ -398,6 +499,37 @@ const Compress = () => {
 
                 {/* Preview Section */}
                 <div className="space-y-6 animate-slide-up">
+                  {/* Compression Result Feedback */}
+                  {compressionResult && compressionMode === "size" && (
+                    <Card className="bg-gradient-to-r from-success/5 to-accent/5 border-success/20">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-2 h-2 rounded-full ${
+                                compressionResult.achieved ? 'bg-success' : 'bg-orange-500'
+                              }`} />
+                              <span className="text-sm font-medium">
+                                {compressionResult.achieved ? 'Target Achieved!' : 'Best Effort'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Compressed in {compressionResult.attempts} attempts
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-mono">
+                              {compressionResult.actualSize} KB
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              Target: {compressionResult.targetSize} KB
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                  
                   <ImagePreview
                     originalImage={originalImage}
                     processedImage={processedImage}
