@@ -184,6 +184,99 @@ export const compressImage = (
   return canvas;
 };
 
+export const rotateImage = (
+  image: HTMLImageElement,
+  angle: number // in degrees
+): HTMLCanvasElement => {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d')!;
+  
+  const radians = (angle * Math.PI) / 180;
+  const sin = Math.abs(Math.sin(radians));
+  const cos = Math.abs(Math.cos(radians));
+  
+  const newWidth = image.width * cos + image.height * sin;
+  const newHeight = image.width * sin + image.height * cos;
+  
+  canvas.width = newWidth;
+  canvas.height = newHeight;
+  
+  ctx.translate(newWidth / 2, newHeight / 2);
+  ctx.rotate(radians);
+  ctx.drawImage(image, -image.width / 2, -image.height / 2);
+  
+  return canvas;
+};
+
+export const flipImage = (
+  image: HTMLImageElement,
+  horizontal: boolean = true,
+  vertical: boolean = false
+): HTMLCanvasElement => {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d')!;
+  
+  canvas.width = image.width;
+  canvas.height = image.height;
+  
+  ctx.save();
+  
+  if (horizontal) {
+    ctx.scale(-1, 1);
+    ctx.translate(-canvas.width, 0);
+  }
+  
+  if (vertical) {
+    ctx.scale(1, -1);
+    ctx.translate(0, -canvas.height);
+  }
+  
+  ctx.drawImage(image, 0, 0);
+  ctx.restore();
+  
+  return canvas;
+};
+
+export const adjustBrightness = (
+  canvas: HTMLCanvasElement,
+  brightness: number // -100 to 100
+): HTMLCanvasElement => {
+  const ctx = canvas.getContext('2d')!;
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  
+  const factor = brightness / 100;
+  
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = Math.max(0, Math.min(255, data[i] + factor * 255));     // Red
+    data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + factor * 255)); // Green
+    data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + factor * 255)); // Blue
+  }
+  
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+};
+
+export const adjustContrast = (
+  canvas: HTMLCanvasElement,
+  contrast: number // -100 to 100
+): HTMLCanvasElement => {
+  const ctx = canvas.getContext('2d')!;
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  
+  const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+  
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = Math.max(0, Math.min(255, factor * (data[i] - 128) + 128));     // Red
+    data[i + 1] = Math.max(0, Math.min(255, factor * (data[i + 1] - 128) + 128)); // Green
+    data[i + 2] = Math.max(0, Math.min(255, factor * (data[i + 2] - 128) + 128)); // Blue
+  }
+  
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+};
+
 export const optimizeForWeb = async (
   image: HTMLImageElement,
   targetSize: number, // in KB
