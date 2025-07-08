@@ -6,9 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { loadImageFromFile, canvasToBlob, downloadBlob, resizeImage } from "@/utils/imageUtils";
+import { Badge } from "@/components/ui/badge";
+import { loadImageFromFile, canvasToBlob, downloadBlob, enhanceClarity } from "@/utils/imageUtils";
+import { Sparkles, Zap, Settings2, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 
 const Resize = () => {
@@ -27,6 +31,12 @@ const Resize = () => {
   const [maintainAspectRatio, setMaintainAspectRatio] = useState(true);
   const [resizeMode, setResizeMode] = useState<"dimensions" | "percentage">("dimensions");
   const [percentageScale, setPercentageScale] = useState<string>("100");
+
+  // Advanced settings
+  const [algorithm, setAlgorithm] = useState<'smooth' | 'high-quality' | 'pixelated'>('high-quality');
+  const [sharpenStrength, setSharpenStrength] = useState([0]);
+  const [outputFormat, setOutputFormat] = useState<'png' | 'jpeg' | 'webp'>('png');
+  const [outputQuality, setOutputQuality] = useState([90]);
 
   const handleImageLoad = useCallback(async (file: File, imageUrl: string) => {
     setOriginalFile(file);
@@ -84,28 +94,38 @@ const Resize = () => {
         targetHeight = parseInt(newHeight) || img.height;
       }
 
-      const canvas = resizeImage(img, targetWidth, targetHeight, maintainAspectRatio);
-      const blob = await canvasToBlob(canvas, 'image/png', 1);
+      const canvas = enhanceClarity(img, targetWidth, targetHeight, {
+        algorithm,
+        sharpen: sharpenStrength[0],
+        maintainAspectRatio
+      });
+
+      const mimeType = outputFormat === 'jpeg' ? 'image/jpeg' : 
+                       outputFormat === 'webp' ? 'image/webp' : 'image/png';
+      const quality = outputFormat === 'png' ? 1 : outputQuality[0] / 100;
+      
+      const blob = await canvasToBlob(canvas, mimeType, quality);
 
       setProcessedBlob(blob);
       setProcessedSize(blob.size);
       setProcessedImage(URL.createObjectURL(blob));
       
-      toast.success(`Image resized to ${targetWidth}x${targetHeight}px`);
+      toast.success(`Image resized to ${targetWidth}×${targetHeight}px with ${algorithm} quality`);
     } catch (error) {
       console.error('Resize error:', error);
       toast.error("Failed to resize image");
     } finally {
       setLoading(false);
     }
-  }, [originalFile, resizeMode, newWidth, newHeight, percentageScale, maintainAspectRatio]);
+  }, [originalFile, resizeMode, newWidth, newHeight, percentageScale, maintainAspectRatio, algorithm, sharpenStrength, outputFormat, outputQuality]);
 
   const handleDownload = useCallback(() => {
     if (!processedBlob || !originalFile) return;
     
     const baseName = originalFile.name.split('.')[0];
-    downloadBlob(processedBlob, `${baseName}_resized.png`);
-  }, [processedBlob, originalFile]);
+    const extension = outputFormat === 'jpeg' ? 'jpg' : outputFormat;
+    downloadBlob(processedBlob, `${baseName}_resized.${extension}`);
+  }, [processedBlob, originalFile, outputFormat]);
 
   const handleClear = useCallback(() => {
     setOriginalFile(null);
@@ -121,115 +141,250 @@ const Resize = () => {
 
   return (
     <Layout>
-      <div className="container mx-auto py-12 px-4">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-4">Image Resizer</h1>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Resize your images to custom dimensions or by percentage. Maintain aspect ratio or stretch to fit.
-          </p>
-        </div>
-        
-        <div className="max-w-4xl mx-auto space-y-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>Upload Image</CardTitle>
-              <CardDescription>
-                Choose an image to resize. All processing happens in your browser.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ImageUpload onImageLoad={handleImageLoad} onClear={handleClear} />
-            </CardContent>
-          </Card>
-
-          {originalFile && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Resize Settings</CardTitle>
-                <CardDescription>
-                  Original size: {originalDimensions.width}x{originalDimensions.height}px
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <Tabs value={resizeMode} onValueChange={(value) => setResizeMode(value as "dimensions" | "percentage")}>
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="dimensions">Custom Dimensions</TabsTrigger>
-                    <TabsTrigger value="percentage">Percentage Scale</TabsTrigger>
-                  </TabsList>
-                  
-                  <TabsContent value="dimensions" className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="width">Width (px)</Label>
-                        <Input
-                          id="width"
-                          type="number"
-                          value={newWidth}
-                          onChange={(e) => updateDimensions(e.target.value, newHeight, true)}
-                          placeholder="Width"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="height">Height (px)</Label>
-                        <Input
-                          id="height"
-                          type="number"
-                          value={newHeight}
-                          onChange={(e) => updateDimensions(newWidth, e.target.value, false)}
-                          placeholder="Height"
-                        />
-                      </div>
-                    </div>
-                  </TabsContent>
-                  
-                  <TabsContent value="percentage" className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="percentage">Scale Percentage</Label>
-                      <Input
-                        id="percentage"
-                        type="number"
-                        value={percentageScale}
-                        onChange={(e) => setPercentageScale(e.target.value)}
-                        placeholder="100"
-                        min="1"
-                        max="500"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        100% = original size, 50% = half size, 200% = double size
-                      </p>
-                    </div>
-                  </TabsContent>
-                </Tabs>
-
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="aspect-ratio"
-                    checked={maintainAspectRatio}
-                    onCheckedChange={setMaintainAspectRatio}
-                  />
-                  <Label htmlFor="aspect-ratio">Maintain aspect ratio</Label>
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
+        <div className="container mx-auto py-12 px-4 space-y-8">
+          {/* Hero Section */}
+          <div className="text-center space-y-4 animate-fade-in">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-primary rounded-full text-primary-foreground text-sm font-medium mb-4">
+              <Sparkles className="w-4 h-4" />
+              Advanced Image Resizer
+            </div>
+            <h1 className="text-4xl md:text-6xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+              Smart Image Resizing
+            </h1>
+            <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+              Resize images with AI-powered clarity enhancement, advanced algorithms, and pixel-perfect precision
+            </p>
+          </div>
+          
+          <div className="max-w-5xl mx-auto space-y-8">
+            {/* Upload Section */}
+            <Card className="overflow-hidden bg-gradient-card border-0 shadow-soft animate-slide-up">
+              <CardHeader className="bg-gradient-to-r from-primary/5 to-accent/5 border-b">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <ImageIcon className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl">Upload Your Image</CardTitle>
+                    <CardDescription>
+                      Support for JPG, PNG, WebP, and GIF • Processing happens locally in your browser
+                    </CardDescription>
+                  </div>
                 </div>
-
-                <Button 
-                  onClick={resizeImageHandler} 
-                  disabled={loading} 
-                  size="lg" 
-                  className="w-full"
-                >
-                  {loading ? "Resizing..." : "Resize Image"}
-                </Button>
+              </CardHeader>
+              <CardContent className="p-6">
+                <ImageUpload onImageLoad={handleImageLoad} onClear={handleClear} />
               </CardContent>
             </Card>
-          )}
 
-          <ImagePreview
-            originalImage={originalImage}
-            processedImage={processedImage}
-            originalSize={originalSize}
-            processedSize={processedSize}
-            onDownload={handleDownload}
-            loading={loading}
-          />
+            {originalFile && (
+              <div className="grid lg:grid-cols-2 gap-8">
+                {/* Settings Panel */}
+                <Card className="bg-gradient-card border-0 shadow-soft animate-slide-up">
+                  <CardHeader className="bg-gradient-to-r from-accent/5 to-primary/5 border-b">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-accent/10 rounded-lg">
+                        <Settings2 className="w-5 h-5 text-accent" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-xl">Resize Settings</CardTitle>
+                        <CardDescription>
+                          Original: {originalDimensions.width}×{originalDimensions.height}px
+                        </CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-6 space-y-6">
+                    {/* Resize Mode Tabs */}
+                    <Tabs value={resizeMode} onValueChange={(value) => setResizeMode(value as "dimensions" | "percentage")}>
+                      <TabsList className="grid w-full grid-cols-2 p-1 bg-muted/50">
+                        <TabsTrigger value="dimensions" className="text-sm">Custom Size</TabsTrigger>
+                        <TabsTrigger value="percentage" className="text-sm">Scale %</TabsTrigger>
+                      </TabsList>
+                      
+                      <TabsContent value="dimensions" className="space-y-4 mt-6">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="width" className="text-sm font-medium">Width (px)</Label>
+                            <Input
+                              id="width"
+                              type="number"
+                              value={newWidth}
+                              onChange={(e) => updateDimensions(e.target.value, newHeight, true)}
+                              className="text-center"
+                              placeholder="Width"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="height" className="text-sm font-medium">Height (px)</Label>
+                            <Input
+                              id="height"
+                              type="number"
+                              value={newHeight}
+                              onChange={(e) => updateDimensions(newWidth, e.target.value, false)}
+                              className="text-center"
+                              placeholder="Height"
+                            />
+                          </div>
+                        </div>
+                      </TabsContent>
+                      
+                      <TabsContent value="percentage" className="space-y-4 mt-6">
+                        <div className="space-y-3">
+                          <Label htmlFor="percentage" className="text-sm font-medium">Scale Percentage</Label>
+                          <div className="flex items-center gap-4">
+                            <Input
+                              id="percentage"
+                              type="number"
+                              value={percentageScale}
+                              onChange={(e) => setPercentageScale(e.target.value)}
+                              className="text-center"
+                              min="1"
+                              max="500"
+                            />
+                            <Badge variant="secondary" className="shrink-0">
+                              {Math.round(originalDimensions.width * parseFloat(percentageScale) / 100)}×{Math.round(originalDimensions.height * parseFloat(percentageScale) / 100)}px
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            100% = original size • 50% = half size • 200% = double size
+                          </p>
+                        </div>
+                      </TabsContent>
+                    </Tabs>
+
+                    {/* Advanced Settings */}
+                    <div className="space-y-6 pt-4 border-t">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">Advanced Settings</Label>
+                        <Badge variant="outline" className="text-xs">
+                          <Zap className="w-3 h-3 mr-1" />
+                          Pro Features
+                        </Badge>
+                      </div>
+
+                      {/* Quality Algorithm */}
+                      <div className="space-y-3">
+                        <Label className="text-sm font-medium">Resize Algorithm</Label>
+                        <Select value={algorithm} onValueChange={(value) => setAlgorithm(value as 'smooth' | 'high-quality' | 'pixelated')}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="high-quality">High Quality (Recommended)</SelectItem>
+                            <SelectItem value="smooth">Smooth</SelectItem>
+                            <SelectItem value="pixelated">Pixelated (8-bit style)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Sharpening */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Image Sharpening</Label>
+                          <Badge variant="secondary" className="text-xs">
+                            {sharpenStrength[0] === 0 ? 'Off' : `${Math.round(sharpenStrength[0] * 100)}%`}
+                          </Badge>
+                        </div>
+                        <Slider
+                          value={sharpenStrength}
+                          onValueChange={setSharpenStrength}
+                          max={1}
+                          min={0}
+                          step={0.1}
+                          className="w-full"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Enhance image clarity and detail definition
+                        </p>
+                      </div>
+
+                      {/* Output Format */}
+                      <div className="space-y-3">
+                        <Label className="text-sm font-medium">Output Format</Label>
+                        <Select value={outputFormat} onValueChange={(value) => setOutputFormat(value as 'png' | 'jpeg' | 'webp')}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="png">PNG (Lossless)</SelectItem>
+                            <SelectItem value="jpeg">JPEG (Smaller size)</SelectItem>
+                            <SelectItem value="webp">WebP (Modern)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Quality Slider for JPEG/WebP */}
+                      {outputFormat !== 'png' && (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium">Output Quality</Label>
+                            <Badge variant="secondary" className="text-xs">
+                              {outputQuality[0]}%
+                            </Badge>
+                          </div>
+                          <Slider
+                            value={outputQuality}
+                            onValueChange={setOutputQuality}
+                            max={100}
+                            min={10}
+                            step={5}
+                            className="w-full"
+                          />
+                        </div>
+                      )}
+
+                      {/* Aspect Ratio Toggle */}
+                      <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+                        <div className="space-y-1">
+                          <Label htmlFor="aspect-ratio" className="text-sm font-medium">Maintain Aspect Ratio</Label>
+                          <p className="text-xs text-muted-foreground">Prevent image distortion</p>
+                        </div>
+                        <Switch
+                          id="aspect-ratio"
+                          checked={maintainAspectRatio}
+                          onCheckedChange={setMaintainAspectRatio}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Resize Button */}
+                    <Button 
+                      onClick={resizeImageHandler} 
+                      disabled={loading} 
+                      size="lg" 
+                      className="w-full bg-gradient-primary hover:opacity-90 transition-all duration-300 shadow-medium hover:shadow-strong"
+                    >
+                      {loading ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2" />
+                          Enhancing Image...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4 mr-2" />
+                          Resize & Enhance
+                        </>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                {/* Preview Section */}
+                <div className="space-y-6 animate-slide-up">
+                  <ImagePreview
+                    originalImage={originalImage}
+                    processedImage={processedImage}
+                    originalSize={originalSize}
+                    processedSize={processedSize}
+                    onDownload={handleDownload}
+                    loading={loading}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </Layout>

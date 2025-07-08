@@ -46,7 +46,8 @@ export const resizeImage = (
   image: HTMLImageElement, 
   width: number, 
   height: number, 
-  maintainAspectRatio: boolean = true
+  maintainAspectRatio: boolean = true,
+  algorithm: 'smooth' | 'high-quality' | 'pixelated' = 'high-quality'
 ): HTMLCanvasElement => {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d')!;
@@ -63,7 +64,77 @@ export const resizeImage = (
   canvas.width = width;
   canvas.height = height;
   
+  // Set image smoothing based on algorithm
+  switch (algorithm) {
+    case 'smooth':
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'medium';
+      break;
+    case 'high-quality':
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      break;
+    case 'pixelated':
+      ctx.imageSmoothingEnabled = false;
+      break;
+  }
+  
   ctx.drawImage(image, 0, 0, width, height);
+  return canvas;
+};
+
+export const sharpenImage = (canvas: HTMLCanvasElement, strength: number = 0.5): HTMLCanvasElement => {
+  const ctx = canvas.getContext('2d')!;
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  
+  const sharpenKernel = [
+    0, -strength, 0,
+    -strength, 1 + 4 * strength, -strength,
+    0, -strength, 0
+  ];
+  
+  const output = new Uint8ClampedArray(data.length);
+  
+  for (let y = 1; y < canvas.height - 1; y++) {
+    for (let x = 1; x < canvas.width - 1; x++) {
+      for (let c = 0; c < 3; c++) {
+        let sum = 0;
+        for (let ky = -1; ky <= 1; ky++) {
+          for (let kx = -1; kx <= 1; kx++) {
+            const idx = ((y + ky) * canvas.width + (x + kx)) * 4 + c;
+            sum += data[idx] * sharpenKernel[(ky + 1) * 3 + (kx + 1)];
+          }
+        }
+        const idx = (y * canvas.width + x) * 4 + c;
+        output[idx] = Math.max(0, Math.min(255, sum));
+      }
+      const alphaIdx = (y * canvas.width + x) * 4 + 3;
+      output[alphaIdx] = data[alphaIdx];
+    }
+  }
+  
+  const outputImageData = new ImageData(output, canvas.width, canvas.height);
+  ctx.putImageData(outputImageData, 0, 0);
+  return canvas;
+};
+
+export const enhanceClarity = (
+  image: HTMLImageElement,
+  width: number,
+  height: number,
+  options: {
+    algorithm: 'smooth' | 'high-quality' | 'pixelated';
+    sharpen: number;
+    maintainAspectRatio: boolean;
+  }
+): HTMLCanvasElement => {
+  let canvas = resizeImage(image, width, height, options.maintainAspectRatio, options.algorithm);
+  
+  if (options.sharpen > 0) {
+    canvas = sharpenImage(canvas, options.sharpen);
+  }
+  
   return canvas;
 };
 
