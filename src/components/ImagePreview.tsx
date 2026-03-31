@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
-import { Download } from "lucide-react";
+import { Download, ArrowRight } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 interface ImagePreviewProps {
   originalImage?: string;
@@ -32,68 +33,65 @@ export const ImagePreview = ({
     return savings > 0 ? savings.toFixed(1) : null;
   };
 
+  if (!originalImage && !processedImage) return null;
+
   return (
     <div className="space-y-6">
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Original Image */}
+        {/* Original */}
         <div className="space-y-3">
-          <h3 className="font-semibold text-center">Original</h3>
-          <div className="bg-muted/30 rounded-lg p-4 min-h-[200px] flex items-center justify-center">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">Original</h3>
+            {originalSize ? (
+              <Badge variant="secondary" className="text-xs font-mono">{formatFileSize(originalSize)}</Badge>
+            ) : null}
+          </div>
+          <div className="bg-muted/20 rounded-xl border border-border/40 p-4 min-h-[200px] flex items-center justify-center">
             {originalImage ? (
-              <img 
-                src={originalImage} 
-                alt="Original" 
-                className="max-w-full max-h-48 object-contain rounded"
-              />
+              <img src={originalImage} alt="Original" className="max-w-full max-h-52 object-contain rounded-lg" />
             ) : (
-              <p className="text-muted-foreground">No image selected</p>
+              <p className="text-muted-foreground text-sm">No image selected</p>
             )}
           </div>
-          {originalSize && (
-            <p className="text-center text-sm text-muted-foreground">
-              Size: {formatFileSize(originalSize)}
-            </p>
-          )}
         </div>
 
-        {/* Processed Image */}
+        {/* Processed */}
         <div className="space-y-3">
-          <h3 className="font-semibold text-center">Processed</h3>
-          <div className="bg-muted/30 rounded-lg p-4 min-h-[200px] flex items-center justify-center">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">Processed</h3>
+            {processedSize ? (
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="text-xs font-mono">{formatFileSize(processedSize)}</Badge>
+                {getSavings() && (
+                  <Badge className="text-xs bg-success/10 text-success border-success/20">
+                    -{getSavings()}%
+                  </Badge>
+                )}
+              </div>
+            ) : null}
+          </div>
+          <div className="bg-muted/20 rounded-xl border border-border/40 p-4 min-h-[200px] flex items-center justify-center">
             {loading ? (
-              <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-                <span className="text-muted-foreground">Processing...</span>
+              <div className="flex items-center gap-3">
+                <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                <span className="text-muted-foreground text-sm">Processing...</span>
               </div>
             ) : processedImage ? (
-              <img 
-                src={processedImage} 
-                alt="Processed" 
-                className="max-w-full max-h-48 object-contain rounded"
-              />
+              <img src={processedImage} alt="Processed" className="max-w-full max-h-52 object-contain rounded-lg" />
             ) : (
-              <p className="text-muted-foreground">Upload and process an image</p>
+              <div className="text-center space-y-2">
+                <ArrowRight className="w-6 h-6 text-muted-foreground/40 mx-auto" />
+                <p className="text-muted-foreground text-sm">Result will appear here</p>
+              </div>
             )}
           </div>
-          {processedSize && (
-            <div className="text-center space-y-1">
-              <p className="text-sm text-muted-foreground">
-                Size: {formatFileSize(processedSize)}
-              </p>
-              {getSavings() && (
-                <p className="text-sm text-success font-medium">
-                  {getSavings()}% smaller
-                </p>
-              )}
-            </div>
-          )}
         </div>
       </div>
 
       {processedImage && onDownload && (
         <div className="text-center">
-          <Button onClick={onDownload} size="lg" className="w-full sm:w-auto">
-            <Download className="w-4 h-4 mr-2" />
+          <Button onClick={onDownload} size="lg" className="bg-gradient-primary hover:opacity-90 transition-all shadow-medium hover:shadow-strong gap-2">
+            <Download className="w-4 h-4" />
             Download Processed Image
           </Button>
         </div>

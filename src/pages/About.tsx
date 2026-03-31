@@ -1,57 +1,76 @@
 import { Layout } from "@/components/Layout";
+import { Card, CardContent } from "@/components/ui/card";
+import { Shield, Zap, Star, Smartphone, Lock, Globe, Heart } from "lucide-react";
+
+const features = [
+  { icon: Shield, title: "100% Private", desc: "Images never leave your device. All processing is client-side." },
+  { icon: Zap, title: "Lightning Fast", desc: "Instant processing with zero upload wait time." },
+  { icon: Star, title: "Always Free", desc: "No subscriptions, no hidden fees, no usage limits." },
+  { icon: Smartphone, title: "Works Everywhere", desc: "Responsive design for desktop, tablet, and mobile." },
+];
+
+const values = [
+  { icon: Lock, title: "Privacy by Design", desc: "We can't see your images because they never reach our servers. Zero-knowledge architecture means your data stays yours." },
+  { icon: Globe, title: "Open & Accessible", desc: "Works in any modern browser, on any device. No downloads, no installations, no accounts required." },
+  { icon: Heart, title: "Built with Care", desc: "Every tool is crafted with attention to detail, using the latest web technologies for the best possible experience." },
+];
 
 const About = () => {
   return (
     <Layout>
-      <div className="container mx-auto py-12 px-4">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold mb-4">About ImageTools</h1>
-            <p className="text-xl text-muted-foreground">
-              Your privacy-first image processing solution
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
+        <div className="container mx-auto py-12 px-4 space-y-12">
+          {/* Hero */}
+          <div className="text-center space-y-4 animate-fade-in max-w-3xl mx-auto">
+            <h1 className="text-4xl md:text-6xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+              About ImageTools
+            </h1>
+            <p className="text-xl text-muted-foreground leading-relaxed">
+              Professional image processing that respects your privacy. Fast, free, and entirely in your browser.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8 mb-12">
-            <div className="bg-card rounded-lg shadow-medium p-6 border">
-              <h2 className="text-2xl font-semibold mb-4">Our Mission</h2>
-              <p className="text-muted-foreground">
-                We believe image editing should be fast, free, and completely private. 
-                ImageTools processes all images directly in your browser, ensuring your 
-                files never leave your device.
-              </p>
-            </div>
+          {/* Features Grid */}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-5xl mx-auto">
+            {features.map((f) => (
+              <Card key={f.title} className="bg-gradient-card border-0 shadow-soft text-center group hover:shadow-medium transition-all">
+                <CardContent className="p-6 space-y-3">
+                  <div className="inline-flex p-3 rounded-xl bg-primary/10 group-hover:bg-primary/15 transition-colors">
+                    <f.icon className="h-6 w-6 text-primary" />
+                  </div>
+                  <h3 className="font-semibold">{f.title}</h3>
+                  <p className="text-sm text-muted-foreground">{f.desc}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
 
-            <div className="bg-card rounded-lg shadow-medium p-6 border">
-              <h2 className="text-2xl font-semibold mb-4">Privacy First</h2>
-              <p className="text-muted-foreground">
-                All image processing happens client-side in your browser. We don't 
-                store, upload, or have access to any of your images. What happens 
-                on your device, stays on your device.
-              </p>
+          {/* Values */}
+          <div className="max-w-4xl mx-auto space-y-6">
+            <h2 className="text-2xl md:text-3xl font-bold text-center">What We Stand For</h2>
+            <div className="grid md:grid-cols-3 gap-6">
+              {values.map((v) => (
+                <Card key={v.title} className="bg-gradient-card border-0 shadow-soft">
+                  <CardContent className="p-6 space-y-3">
+                    <div className="p-2 bg-accent/10 rounded-lg w-fit">
+                      <v.icon className="h-5 w-5 text-accent" />
+                    </div>
+                    <h3 className="font-semibold">{v.title}</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{v.desc}</p>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           </div>
 
-          <div className="bg-gradient-card rounded-lg shadow-medium p-8 border">
-            <h2 className="text-2xl font-semibold mb-4 text-center">Why Choose ImageTools?</h2>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="text-center">
-                <h3 className="font-semibold mb-2">100% Free</h3>
-                <p className="text-sm text-muted-foreground">No subscriptions, no hidden fees</p>
-              </div>
-              <div className="text-center">
-                <h3 className="font-semibold mb-2">Client-Side</h3>
-                <p className="text-sm text-muted-foreground">Your images never leave your device</p>
-              </div>
-              <div className="text-center">
-                <h3 className="font-semibold mb-2">Fast Processing</h3>
-                <p className="text-sm text-muted-foreground">Instant results, no waiting</p>
-              </div>
-              <div className="text-center">
-                <h3 className="font-semibold mb-2">Modern Tools</h3>
-                <p className="text-sm text-muted-foreground">Latest web technologies</p>
-              </div>
-            </div>
+          {/* CTA */}
+          <div className="text-center py-8">
+            <Card className="bg-gradient-to-r from-primary/5 to-accent/5 border-primary/10 max-w-2xl mx-auto">
+              <CardContent className="p-8 space-y-3">
+                <h2 className="text-2xl font-bold">Ready to get started?</h2>
+                <p className="text-muted-foreground">No sign-up needed. Just pick a tool and go.</p>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
